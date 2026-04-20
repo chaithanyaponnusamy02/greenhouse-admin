@@ -1,64 +1,137 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Search, Eye, Filter } from "lucide-react";
 
+type ActivityRecord = {
+  activity_id?: string;
+  title?: unknown;
+  faculty_id?: unknown;
+  category?: unknown;
+  activity_date?: string;
+  status?: unknown;
+  description?: unknown;
+};
+
+type ActivityItem = {
+  id: string;
+  title: string;
+  user: string;
+  category: string;
+  date: string;
+  score: number;
+  status: string;
+  proof: string;
+  description: string;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const getDisplayText = (value: unknown, fallback = "N/A"): string => {
+  if (value == null) return fallback;
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    const normalized = String(value).trim();
+    return normalized || fallback;
+  }
+
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map((item) => getDisplayText(item, ""))
+      .filter(Boolean)
+      .join(", ");
+    return normalized || fallback;
+  }
+
+  if (isRecord(value)) {
+    const preferredKeys = ["name", "title", "email", "category", "description", "status", "_id", "id"];
+
+    for (const key of preferredKeys) {
+      if (key in value) {
+        const normalized = getDisplayText(value[key], "");
+        if (normalized) return normalized;
+      }
+    }
+  }
+
+  return fallback;
+};
+
+const getUserDisplay = (value: unknown) => {
+  if (isRecord(value)) {
+    const name = getDisplayText(value.name, "");
+    const email = getDisplayText(value.email, "");
+
+    if (name && email) return `${name} (${email})`;
+    if (name) return name;
+    if (email) return email;
+  }
+
+  return getDisplayText(value);
+};
+
+const formatDate = (value?: string) => {
+  if (!value) return "N/A";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toISOString().split("T")[0];
+};
+
 export default function ActivityOverview() {
-  const [activities, setActivities] = useState([]);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [selectedActivity, setSelectedActivity] = useState(null);
+  const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(null);
 
-  // 🔥 Fetch API
- useEffect(() => {
-  const fetchActivities = async () => {
-    try {
-      const token = localStorage.getItem("token");
+  useEffect(() => {
+    const fetchActivities = async () => {
+      try {
+        const token = localStorage.getItem("token");
 
-      const res = await fetch("https://greenhouse-backend-kvyr.onrender.com/api/admin/activities", {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`, // ✅ IMPORTANT
-        },
-      });
+        const res = await fetch("https://greenhouse-backend-kvyr.onrender.com/api/admin/activities", {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
-      const data = await res.json();
+        const data = (await res.json()) as ActivityRecord[] | { detail?: string };
 
-      // ✅ Handle error response safely
-      if (!res.ok) {
-        console.error("API Error:", data);
-        return;
+        if (!res.ok) {
+          console.error("API Error:", data);
+          return;
+        }
+
+        if (!Array.isArray(data)) {
+          console.error("Unexpected response:", data);
+          return;
+        }
+
+        const formattedData = data.map((item) => ({
+          id: item.activity_id || crypto.randomUUID(),
+          title: getDisplayText(item.title, "Untitled Activity"),
+          user: getUserDisplay(item.faculty_id),
+          category: getDisplayText(item.category),
+          date: formatDate(item.activity_date),
+          score: 0,
+          status: getDisplayText(item.status, "unknown").toLowerCase(),
+          proof: "No file",
+          description: getDisplayText(item.description, "No description available"),
+        }));
+
+        setActivities(formattedData);
+      } catch (error) {
+        console.error("Error fetching activities:", error);
+      } finally {
+        setLoading(false);
       }
+    };
 
-      // ✅ Ensure it's an array
-      if (!Array.isArray(data)) {
-        console.error("Unexpected response:", data);
-        return;
-      }
+    void fetchActivities();
+  }, []);
 
-      const formattedData = data.map((item) => ({
-        id: item.activity_id,
-        title: item.title,
-        user: item.faculty_id || "N/A",
-        category: item.category,
-        date: item.activity_date?.split("T")[0],
-        score: 0,
-        status: item.status,
-        proof: "No file",
-        description: item.description,
-      }));
-
-      setActivities(formattedData);
-    } catch (error) {
-      console.error("Error fetching activities:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  fetchActivities();
-}, []);
-
-  // 🔍 Filter Logic
   const filteredActivities = activities.filter((activity) => {
     const matchesSearch =
       activity.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -71,7 +144,6 @@ export default function ActivityOverview() {
     return matchesSearch && matchesStatus;
   });
 
-  // ⏳ Loading
   if (loading) {
     return (
       <p className="text-center text-gray-600 mt-10">
@@ -82,7 +154,6 @@ export default function ActivityOverview() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-2xl font-bold text-gray-800">
           Activity Overview
@@ -92,7 +163,6 @@ export default function ActivityOverview() {
         </p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow-md p-4">
           <p className="text-sm text-gray-600 mb-1">Total Activities</p>
@@ -123,10 +193,8 @@ export default function ActivityOverview() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="bg-white rounded-lg shadow-md p-4">
         <div className="flex flex-col sm:flex-row gap-4">
-          {/* Search */}
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -138,7 +206,6 @@ export default function ActivityOverview() {
             />
           </div>
 
-          {/* Status Filter */}
           <div className="flex items-center gap-2">
             <Filter className="w-5 h-5 text-gray-400" />
             <select
@@ -155,7 +222,6 @@ export default function ActivityOverview() {
         </div>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -164,7 +230,6 @@ export default function ActivityOverview() {
                 <th className="py-3 px-4 text-left text-sm text-gray-600">
                   Activity
                 </th>
-                
                 <th className="py-3 px-4 text-left text-sm text-gray-600">
                   Category
                 </th>
@@ -214,7 +279,6 @@ export default function ActivityOverview() {
         </div>
       </div>
 
-      {/* Modal */}
       {selectedActivity && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center">
           <div className="bg-white p-6 rounded-lg w-full max-w-lg">
