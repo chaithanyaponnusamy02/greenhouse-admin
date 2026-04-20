@@ -18,7 +18,6 @@ const navigation = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { name: "User Management", href: "/admin/users", icon: Users },
   { name: "Activities", href: "/admin/activities", icon: Leaf },
-  { name: "Evaluations", href: "/admin/evaluations", icon: ClipboardCheck },
   { name: "Reports", href: "/admin/reports", icon: FileText },
   
 ];
